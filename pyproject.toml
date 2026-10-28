@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-security-test-kit"
+version = "0.1.0"
+description = "A pytest-based security test kit for human-gated IT automation agents: injection, unauthorized actions, forged approvals, false 'done' claims, audit integrity."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Lonnie Thomas" }]
+dependencies = ["pytest>=7.4"]
+
+[project.scripts]
+agent-sec-kit = "agent_security_kit.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

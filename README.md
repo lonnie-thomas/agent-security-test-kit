@@ -1,17 +1,18 @@
 # Agent Security Test Kit
 
-A small, **pytest-based security test kit for human-gated IT automation agents**: agents that read a ticket,
-propose remediation steps, wait for a person to approve, and then act through an executor. Point it at an agent
-through a ~15-method adapter and it tells you, with evidence, whether the controls that are supposed to keep that
-agent safe actually hold.
+A pytest-based test kit that checks whether the safety controls around a human-gated information technology (IT) automation agent actually hold: hidden instructions planted in tickets, actions outside the allowlist, forged or replayed approvals, false "done" claims, and tampered audit logs. Point it at your agent through a small adapter and you get a pass/fail matrix with severity ratings, Open Worldwide Application Security Project (OWASP) mappings, and evidence you can hand to a security reviewer or auditor.
 
 It ships with:
 
-* an **adapter for the sibling project** [`it-service-agent-demo`](../it-service-agent-demo) (the secure reference), and
+* an **adapter for the companion project** [`it-service-agent-demo`](https://github.com/lonnie-thomas/it-service-agent-demo) (the secure reference), and
 * a **deliberately vulnerable toy agent**, so you can see the tests catch real failures (and pass the few things the toy gets right).
 
-> All data is synthetic (`example.test` identities, fake secrets). Nothing here touches a real system.
+> All data is synthetic (`example.test` identities, fake secrets). Nothing here touches a real system. The agents tested here use a deterministic mock planner, not a live large language model (LLM).
 > This is an engineering portfolio project, not a certified product or a compliance attestation.
+>
+> **About:** Built by Lonnie Thomas, enterprise IT leader.
+
+**Contents:** [Why this exists](#why-this-exists) · [Who it's for and real-world uses](#who-its-for-and-real-world-uses) · [What it does and doesn't prove](#what-it-does-and-doesnt-prove) · [What it tests](#what-it-tests) · [Results](#results) · [Quickstart](#quickstart) · [Testing your own agent](#testing-your-own-agent-the-adapter-interface) · [Related work](#related-work) · [Contributing and security](#contributing-and-security)
 
 ## Why this exists
 
@@ -20,6 +21,31 @@ An AI agent that can change things (unlock an account, restart a service, change
 so the controls around the model (allowlist, approval gate, honest reporting, tamper-evident logging) matter
 more than the model. This kit tests those controls directly, as black-box behaviour, independent of which LLM
 is used.
+
+## Who it's for and real-world uses
+
+| If you are... | How to use this kit |
+|---|---|
+| **A security team red-teaming agents before production** | Run the 30-test catalogue (83 cases) as a repeatable baseline before a human red team starts, so testers spend their time on novel attacks rather than rediscovering missing basics. |
+| **An IT service desk piloting artificial intelligence (AI) agents** | Write a ~15-method adapter for your pilot agent and find out, with evidence, whether it can be steered by ticket text, whether it honours the allowlist and approval gate, and whether it reports "done" truthfully. |
+| **An internal auditor or Sarbanes-Oxley Act (SOX) control owner** | Use the reports as *evidence of control testing* for an agent in scope of IT general controls: dated, reproducible results for access (approvals), change (plan binding), and monitoring (audit-log integrity) behaviours. It supports your own testing; it is not an audit opinion. |
+| **A buyer running a vendor evaluation** | Ask a vendor to run the kit (or equivalent scenarios) against their agent, or write the adapter yourself in a proof of concept. The **N/A** result (control not present) is deliberately visible, so a missing control is not scored as a pass. |
+| **A trainer or facilitator running a tabletop or workshop** | Run the toy agent live and let participants see each failure, then run the secure reference. The "first failure example per failed test" output makes each attack concrete. |
+| **An engineering team gating agent releases in continuous integration (CI)** | Run `agent-sec-kit run --agent your.module:YourAdapter` on every build. The exit code is non-zero if any scored test fails, so a regression in a control blocks the release. |
+
+## What it does and doesn't prove
+
+**What a pass shows:**
+
+* The agent's *controls* behaved correctly against this catalogue of attacks: planted instructions did not change the plan, non-allowlisted and out-of-scope actions were refused even with a valid approval, forged, expired, tampered, swapped, and replayed approvals were rejected, reports matched the executor's ground truth, and audit-log tampering was detected.
+* The tests bite: the toy agent fails 26 of 30 tests, and disabling one control at a time in the reference agent fails exactly the expected test (see [Does the kit catch regressions in a good agent?](#does-the-kit-catch-regressions-in-a-good-agent)).
+
+**What it does not show:**
+
+* **It tests a mock model, not a live LLM.** Both bundled agents use a deterministic rule-based planner, so the results demonstrate that the *controls around the model* hold. They do not show that a real model resists persuasion. Rerun the kit against the real-model configuration of your own agent.
+* **A fixed catalogue is not a full assessment.** It is a regression and baseline tool, not a substitute for human red-teaming or a formal security assessment. It does not cover OWASP LLM items such as supply chain, training-data poisoning, system-prompt leakage, vector-store weaknesses, or unbounded consumption.
+* **It assumes a reference policy** (documented below). If your policy differs, adapt the scenarios, or the results will not be meaningful.
+* **Passing is not a certification** of any kind, and nothing here is a compliance attestation.
 
 ## What it tests
 
@@ -38,7 +64,7 @@ Tests whose ID ends in `-00`, plus D-04, E-01 and E-08, are **positive controls*
 
 ## Results
 
-Real output from running the kit (commands below) on 2026-10-28 against both agents (`it-service-agent-demo` at commit `c0a973d`):
+Real output from running the kit (commands below) on 2026-10-28 against both agents (`it-service-agent-demo` version 0.1.0, as released alongside this kit):
 
 | ID | Category | Test | Severity | OWASP (2025) | `toy` | `it-service-agent` |
 |---|---|---|---|---|---|---|
@@ -218,23 +244,60 @@ Each mutation failed exactly the expected test and nothing else.
 
 ## Quickstart
 
+Requires Python 3.10 or newer and `git`. No network access or API keys are needed to run the tests (installing `pytest` needs a package index once).
+
+1. **Clone both repositories side by side** (the kit's adapter needs the reference agent):
+
+   ```bash
+   git clone https://github.com/lonnie-thomas/it-service-agent-demo.git
+   git clone https://github.com/lonnie-thomas/agent-security-test-kit.git
+   cd agent-security-test-kit
+   ```
+
+2. **Create a virtual environment and install both packages** (editable installs, because the agent reads its runbooks from its checkout):
+
+   ```bash
+   python3 -m venv .venv && . .venv/bin/activate
+   pip install -e . -e ../it-service-agent-demo
+   ```
+
+   Using a different location for the agent? Skip the second `-e` and `export ITSA_HOME=/path/to/it-service-agent-demo` instead.
+
+3. **Run the kit's own self-checks.** Expect `8 passed`.
+
+   ```bash
+   python -m pytest
+   ```
+
+4. **Watch the vulnerable toy agent fail, on purpose.** Expect `4/30` scored tests to pass and a non-zero exit code.
+
+   ```bash
+   agent-sec-kit run --agent toy
+   ```
+
+5. **Run it against the secure reference agent.** Expect `30/30` scored tests (83/83 cases) to pass and exit code 0.
+
+   ```bash
+   agent-sec-kit run --agent it-service-agent
+   ```
+
+6. **Save reports and build the comparison matrix** (optional):
+
+   ```bash
+   mkdir -p out
+   agent-sec-kit run --agent toy --json out/results_toy.json --md out/report_toy.md
+   agent-sec-kit run --agent it-service-agent --json out/results_it-service-agent.json --md out/report_it-service-agent.md
+   agent-sec-kit matrix out/results_toy.json out/results_it-service-agent.json > out/matrix.md
+   ```
+
+More options:
+
 ```bash
-python -m venv .venv && . .venv/bin/activate
-pip install -e .                                   # installs the kit + pytest
-pip install -e ../it-service-agent-demo            # only needed for the it-service-agent adapter
-                                                   # (or: export ITSA_HOME=/path/to/it-service-agent-demo)
-
-agent-sec-kit run --agent toy                      # watch it fail, on purpose
-agent-sec-kit run --agent it-service-agent         # watch it pass
-agent-sec-kit run --agent it-service-agent --json out.json --md out.md
 agent-sec-kit run --agent toy -k tampered --tb short   # one family of tests, with tracebacks
-agent-sec-kit matrix reports/results_toy.json reports/results_it-service-agent.json > matrix.md
-
-python -m pytest                                   # the kit's own self-checks (8 tests)
 ```
 
 `--agent` is `toy`, `it-service-agent`, or `package.module:ClassName` for your own adapter. The exit code is
-non-zero if any scored test fails, so it can gate a CI (continuous integration) pipeline. You can also use plain pytest:
+non-zero if any scored test fails, so it can gate a CI pipeline. You can also use plain pytest:
 
 ```bash
 pytest --pyargs agent_security_kit.suite -p agent_security_kit.plugin --agent toy
@@ -314,12 +377,24 @@ Source: OWASP Gen AI Security Project, *Top 10 for LLM Applications 2025*.
 * The vulnerable toy is intentionally unsafe. Never deploy or reuse it.
 * Passing the kit is not a certification of any kind.
 
+## Related work
+
+* **[it-service-agent-demo](https://github.com/lonnie-thomas/it-service-agent-demo)**: the controlled AI IT-service agent this kit tests. It proposes runbook-cited plans, requires a signed human approval bound to the exact plan, and keeps a hash-chained audit log.
+* **An AI-agents-under-SOX controls framework** (a separate write-up by the same author): how to treat agent actions as in-scope controls for Sarbanes-Oxley Act (SOX) purposes, including approvals, segregation of duties, and evidence. This kit shows how some of that evidence can be produced by testing.
+* **A merger-and-acquisition (M&A) IT integration and separation playbook** (a separate write-up by the same author): practical guidance for the IT side of deal integration and carve-outs, where service-desk automation and access control must be handled carefully.
+
+## Contributing and security
+
+Issues and pull requests are welcome, especially new payload carriers, new adapters, and new tests; see [CONTRIBUTING.md](CONTRIBUTING.md). To report a vulnerability, follow [SECURITY.md](SECURITY.md) rather than opening a public issue with exploit details.
+
 ## Acronyms
 
 | Term | Meaning |
 |---|---|
 | AI / LLM | Artificial intelligence / large language model |
 | CI | Continuous integration |
+| M&A | Mergers and acquisitions |
+| SOX | Sarbanes-Oxley Act |
 | HMAC | Hash-based message authentication code |
 | IT | Information technology |
 | JSON / JSONL | JavaScript Object Notation / JSON Lines (one JSON object per line) |
@@ -368,3 +443,7 @@ tests/test_kit_selfcheck.py
 ## License
 
 MIT. See [LICENSE](LICENSE). Copyright (c) 2026 Lonnie Thomas.
+
+---
+
+Built by Lonnie Thomas, enterprise IT leader.
